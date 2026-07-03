@@ -11,19 +11,18 @@
 #include <signal.h>
 #include <termios.h>
 
-struct NewSocket
-{
-	int file;
-	const struct sockaddr address;
-	socklen_t address_length;
-};
-
 void usage()
 {
 	printf("program_name\t<destination>\n\t\t<127.0.0.1>\n");
 }
 
-int start_connection(char *argument[])
+struct NewTcpSocket
+{
+	int file;
+	struct sockaddr_in socket_address_in;
+};
+
+struct NewTcpSocket create_socket(char *argument[])
 {
 	struct in_addr address_in;
 	int address_number = inet_aton(argument[1], &address_in);
@@ -41,19 +40,33 @@ int start_connection(char *argument[])
 	};
 
 	int tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
-	int connection = connect(tcp_socket, (struct sockaddr *)&socket_address_in, sizeof(socket_address_in));
+	if (tcp_socket == -1)
+	{
+		printf("socket creation failed");
+		exit(errno);
+	}
+
+	struct NewTcpSocket tcp_socket_struct =
+	{
+		tcp_socket,
+		socket_address_in
+	};
+	return tcp_socket_struct;
+}
+
+void start_connection(struct NewTcpSocket tcp_socket)
+{
+	int connection = connect(tcp_socket.file, (struct sockaddr *)&tcp_socket.socket_address_in, sizeof(tcp_socket.socket_address_in));
 	if (connection == -1)
 	{
 		printf("connection failed\n");
 		exit(errno);
 	}
-	
-	return tcp_socket;
 }
 
 void close_connection(int tcp_socket, int files_count)
 {
-	if (shutdown(tcp_socket, SHUT_WR) == -1)
+	if (close(tcp_socket) == -1)
 	{
 		printf("failed to shutdown tcp connection\n");
 		exit(errno);
@@ -135,15 +148,15 @@ void main(int argument_count, char *arguments[])
 	while (exit_value == 0)
 	{
 		char key;
-		int tcp_socket = start_connection(arguments);
-		
+		struct NewTcpSocket tcp_socket = create_socket(arguments);
+		start_connection(tcp_socket);
 		read(STDIN_FILENO, &key, 1);
 		//printf("%u\n", key);
-		if (send(tcp_socket, &key, sizeof(char), 0) == -1)
+		if (send(tcp_socket.file, &key, sizeof(char), 0) == -1)
 		{
 			exit(errno);
 		}
-		close_connection(tcp_socket, 2);
+		close_connection(tcp_socket.file, 2);
 	}
 
 	exit(exit_value & 65534);
